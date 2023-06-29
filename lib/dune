@@ -1,0 +1,5 @@
+(library
+ (name cope)
+ (preprocess
+  (staged_pps ppx_import ppx_deriving.show))
+ (libraries mm.audio mm.midi))
