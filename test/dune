@@ -1,3 +1,15 @@
 (test
  (name cope)
- (libraries cope mm.midi fmt))
+ (modules cope)
+ (libraries cope mm.midi fmt)
+ (action
+  (run %{test} bwv772.mid 480)))
+
+; This test does not work (see explanations in it)
+;(test
+; (name midi_files)
+; (modules midi_files)
+; (deps bwv772.mid)
+; (libraries cope mm.midi fmt)
+; (action
+;  (run %{test} bwv772.mid 480)))
