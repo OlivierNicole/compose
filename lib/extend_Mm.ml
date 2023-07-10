@@ -45,7 +45,7 @@ module MIDI = struct
       done;
       reader#close;
       merge !buffer.(0) !buffer.(1);
-      div, !ofs + !read_length, [| data !buffer.(0); |]
+      div, !ofs + !read_length, [| data !buffer.(0) |]
 
     let events_to_file ~path ~sample_rate evs =
       let open Mm_midi.MIDI.IO in
