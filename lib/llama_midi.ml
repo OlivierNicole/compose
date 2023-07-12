@@ -245,12 +245,12 @@ module Channel_voice_message = struct
     in
     Result.map (fun message -> { channel; message }) message
 
-  let encode { channel; message } =
+  let encode ~running_status { channel; message } =
     let byte_msb0 b =
       assert (0 <= b && b <= 0x7f);
       Char.chr (b land 0x7f)
     in
-    let channel_voice_type channel type_ =
+    let status_byte channel type_ =
       assert (0 <= channel && channel <= 15);
       assert (0 <= type_ && type_ <= 7);
       Char.chr
@@ -258,36 +258,42 @@ module Channel_voice_message = struct
             lsl 4)
         lor (channel land 0xf));
     in
-    let channel_voice_message channel type_ bytes =
-      let s = Bytes.create (1 + List.length bytes) in
-      Bytes.set s 0 @@ channel_voice_type channel type_;
-      List.iteri (fun i b -> Bytes.set s (i + 1) (byte_msb0 b)) bytes;
-      Bytes.to_string s
+    let channel_voice_message ~running_status channel type_ bytes =
+      let status_byte = status_byte channel type_ in
+      let s, ofs =
+        if status_byte = running_status then
+          Bytes.create (List.length bytes), 0
+        else
+          (let s = Bytes.create (1 + List.length bytes) in
+           Bytes.set s 0 status_byte; s, 1)
+      in
+      List.iteri (fun i b -> Bytes.set s (i + ofs) (byte_msb0 b)) bytes;
+      Bytes.to_string s, `Status status_byte
     in
     match message with
     | Note_off { note; velocity } ->
-        channel_voice_message channel 0 [note; velocity]
+        channel_voice_message ~running_status channel 0 [note; velocity]
     | Note_on { note; velocity } ->
-        channel_voice_message channel 1 [note; velocity]
+        channel_voice_message ~running_status channel 1 [note; velocity]
     | Program_change program ->
-        channel_voice_message channel 4 [program];
+        channel_voice_message ~running_status channel 4 [program];
     | Control_change { controller; value } ->
-        channel_voice_message channel 3 [controller; value]
+        channel_voice_message ~running_status channel 3 [controller; value]
     | Local_control_off ->
-        channel_voice_message channel 3 [122; 0]
+        channel_voice_message ~running_status channel 3 [122; 0]
     | Local_control_on ->
-        channel_voice_message channel 3 [122; 127]
+        channel_voice_message ~running_status channel 3 [122; 127]
     | All_notes_off None ->
-        channel_voice_message channel 3 [123; 0]
+        channel_voice_message ~running_status channel 3 [123; 0]
     | All_notes_off (Some Omni_mode_off) ->
-        channel_voice_message channel 3 [124; 0]
+        channel_voice_message ~running_status channel 3 [124; 0]
     | All_notes_off (Some Omni_mode_on) ->
-        channel_voice_message channel 3 [125; 0]
+        channel_voice_message ~running_status channel 3 [125; 0]
     | All_notes_off (Some (Mono_mode_on n_channels)) ->
         assert (0 <= n_channels && n_channels <= 127);
-        channel_voice_message channel 3 [126; n_channels]
+        channel_voice_message ~running_status channel 3 [126; n_channels]
     | All_notes_off (Some Poly_mode_on) ->
-        channel_voice_message channel 3 [127; 0]
+        channel_voice_message ~running_status channel 3 [127; 0]
 
 end
 
@@ -352,11 +358,11 @@ module Message = struct
         >>| Result.map (fun channel_voice_message ->
                 Channel_voice_message channel_voice_message)
 
-  let encode = function
+  let encode ~running_status = function
     | Channel_voice_message m ->
-        Channel_voice_message.encode m
+        Channel_voice_message.encode ~running_status m
     | Meta_event ev ->
-        Meta_event.encode ev
+        Meta_event.encode ev, `Status '\xff'
 end
 
 module Event = struct
@@ -386,12 +392,13 @@ module Event = struct
     let+ message = Message.parse_result status in
     ({ delta_time; message }, `Status status)
 
-  let encode { delta_time; message } =
+  let encode ~running_status { delta_time; message } =
     match message with
     | Error (Unimplemented s) ->
         failwith ("Attempt to write event (Unimplemented " ^ s ^ ")")
     | Ok msg ->
-        Output.variable_length_quantity delta_time ^ Message.encode msg
+        let msg, `Status status = Message.encode ~running_status msg in
+        Output.variable_length_quantity delta_time ^ msg, `Status status
 end
 
 module Track = struct
@@ -422,7 +429,14 @@ module Track = struct
 
   let write out trk =
     output_string out "MTrk";
-    let encoded_events = List.map Event.encode trk in
+    let _, encoded_events =
+      List.fold_left_map
+        (fun running_status ev ->
+          let encoded_event, `Status status = Event.encode ~running_status ev in
+          status, encoded_event)
+        '\xff'
+        trk
+    in
     let byte_length =
       List.fold_left (fun acc ev -> acc + String.length ev) 0 encoded_events
     in
@@ -522,5 +536,6 @@ module File_writer = struct
   let write t { Data.header; Data.tracks } =
     output_string t.out "MThd\000\000\000\006";
     Header.write t.out header;
-    List.iter (Track.write t.out) tracks
+    List.iter (Track.write t.out) tracks;
+    close_out t.out
 end
