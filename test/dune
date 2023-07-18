@@ -1,9 +1,9 @@
 (test
  (name cope)
  (modules cope)
- (libraries cope mm.midi fmt)
+ (libraries cope fmt)
  (action
-  (run %{test} bwv772.mid 480)))
+  (run %{test} bwv772.mid)))
 
 (test
  (name midi_files)

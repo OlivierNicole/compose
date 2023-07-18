@@ -1,11 +1,16 @@
+(** Represents a musical note. *)
 type t =
   { timestamp : int
-  ; pitch : Mm_audio.Audio.Note.t
+  ; pitch : int
   ; duration : int
-  ; velocity : float
+  ; velocity : int
   }
 [@@deriving show, eq, ord]
 
-val events_of_midi : (int * Mm_midi.MIDI.event) list -> t list
+(** Converts a track of MIDI events into a list of note events. Ignores channel
+    information. *)
+val events_of_midi : Llama_midi.Track.t -> t list
 
-val events_to_midi : t list -> (int * Mm_midi.MIDI.event) list
+(** Converts a list of note events into a track of MIDI events on channel
+    [channel]. *)
+val events_to_midi : channel:int -> t list -> Llama_midi.Track.t
