@@ -4,8 +4,8 @@ open Cope
 let file =
   try Sys.argv.(1) with Invalid_argument _ -> failwith "expects filename argument"
 
-(* Read MIDI events from a file, keep only the Note_{on,off} events, then check that
-   writing them to another file and re-reading them is idempotent *)
+(* Read a MIDI file and write them to another file. The two files should be
+   identical. *)
 let () =
   let open Llama_midi in
   Fmt.pr "@[<v>";

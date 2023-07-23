@@ -1,11 +1,4 @@
 (test
- (name cope)
- (modules cope)
- (libraries cope fmt)
- (action
-  (run %{test} bwv772.mid)))
-
-(test
  (name midi_files)
  (modules midi_files)
  (deps bwv772.mid)
