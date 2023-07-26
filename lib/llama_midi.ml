@@ -296,8 +296,9 @@ module System_message = struct
     sprintf "((manufacturer_id %d) (payload (%s)))" manufacturer_id
       (String.concat " " (List.map string_of_int payload))
 
+  let system_exclusive_end = 0b11110111
+
   let system_exclusive_parse =
-    let system_exclusive_end = 0b11110111 in
     let open Byte_array_parser in
     let rec loop acc =
       let* byte = byte in
@@ -375,6 +376,24 @@ module System_message = struct
         raise
           (Parse_exception
              (sprintf "Unexpected message type identifier: %d" other))
+
+  let encode = function
+    | System_exclusive { manufacturer_id; payload } ->
+        assert (0 <= manufacturer_id && manufacturer_id < 127);
+        let bytes =
+          Bytes.make (List.length payload + 1) (Char.chr system_exclusive_end) in
+        List.iteri (fun i x ->
+            assert (x land (1 lsl 7) = 0);
+            Bytes.set bytes i (Char.chr x))
+          payload;
+        String.make 1 '\xf0'
+        ^ String.make 1 (Char.chr manufacturer_id)
+        ^ Bytes.to_string bytes
+    | Song_position_pointer value ->
+        assert (value < 1 lsl 15);
+        String.make 1 '\xf2'
+        ^ String.make 1 (Char.chr (value land 0x7f))
+        ^ String.make 1 (Char.chr (value lsr 7))
 end
 
 module Meta_event = struct
