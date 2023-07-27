@@ -258,11 +258,12 @@ module Channel_voice_message = struct
     let channel_voice_message ~running_status channel type_ bytes =
       let status_byte = status_byte channel type_ in
       let s, ofs =
-        if status_byte = running_status then
-          Bytes.create (List.length bytes), 0
-        else
-          (let s = Bytes.create (1 + List.length bytes) in
-           Bytes.set s 0 status_byte; s, 1)
+        match running_status with
+        | `Status s when s = status_byte -> Bytes.create (List.length bytes), 0
+        | `Status _ | `NoRunning ->
+            let s = Bytes.create (1 + List.length bytes) in
+            Bytes.set s 0 status_byte;
+            s, 1
       in
       List.iteri (fun i b -> Bytes.set s (i + ofs) (byte_msb0 b)) bytes;
       Bytes.to_string s, `Status status_byte
@@ -381,8 +382,10 @@ module System_message = struct
     | System_exclusive { manufacturer_id; payload } ->
         assert (0 <= manufacturer_id && manufacturer_id < 127);
         let bytes =
-          Bytes.make (List.length payload + 1) (Char.chr system_exclusive_end) in
-        List.iteri (fun i x ->
+          Bytes.make (List.length payload + 1) (Char.chr system_exclusive_end)
+        in
+        List.iteri
+          (fun i x ->
             assert (x land (1 lsl 7) = 0);
             Bytes.set bytes i (Char.chr x))
           payload;
@@ -394,6 +397,22 @@ module System_message = struct
         String.make 1 '\xf2'
         ^ String.make 1 (Char.chr (value land 0x7f))
         ^ String.make 1 (Char.chr (value lsr 7))
+    | Song_select song ->
+        assert (song < 128);
+        String.make 1 '\xf3' ^ String.make 1 (Char.chr song)
+    | Tune_request -> String.make 1 '\xf6'
+    | Timing_clock -> String.make 1 '\xf8'
+    | Start -> String.make 1 '\xfa'
+    | Continue -> String.make 1 '\xfb'
+    | Stop -> String.make 1 '\xfc'
+    | Active_sensing -> String.make 1 '\xfe'
+    | Reset -> String.make 1 '\xff'
+    | Undefined undefined ->
+        assert (
+          match undefined with
+          | 1 | 4 | 5 | 9 | 13 -> true
+          | _ -> false);
+        String.make 1 @@ Char.chr @@ (0xf0 lor undefined)
 end
 
 module Meta_event = struct
@@ -461,12 +480,9 @@ module Message = struct
         Channel_voice_message channel_voice_message
 
   let encode ~running_status = function
-    | Channel_voice_message m ->
-        Channel_voice_message.encode ~running_status m
-    | Meta_event ev ->
-        Meta_event.encode ev, `Status '\xff'
-    | System_message _ ->
-        failwith "Unimplemented: writing of System_message"
+    | Channel_voice_message m -> Channel_voice_message.encode ~running_status m
+    | Meta_event ev -> Meta_event.encode ev, `NoRunning
+    | System_message sysex -> System_message.encode sysex, `NoRunning
 end
 
 module Event = struct
@@ -492,8 +508,8 @@ module Event = struct
     ({ delta_time; message }, `Status status)
 
   let encode ~running_status { delta_time; message } =
-    let msg, `Status status = Message.encode ~running_status message in
-    Output.variable_length_quantity delta_time ^ msg, `Status status
+    let msg, status = Message.encode ~running_status message in
+    Output.variable_length_quantity delta_time ^ msg, status
 end
 
 module Track = struct
@@ -527,9 +543,9 @@ module Track = struct
     let _, encoded_events =
       List.fold_left_map
         (fun running_status ev ->
-          let encoded_event, `Status status = Event.encode ~running_status ev in
+          let encoded_event, status = Event.encode ~running_status ev in
           status, encoded_event)
-        '\xff'
+        `NoRunning
         trk
     in
     let byte_length =
@@ -625,8 +641,7 @@ end
 module File_writer = struct
   type t = { out : out_channel }
 
-  let of_path path =
-    { out = open_out_bin path }
+  let of_path path = { out = open_out_bin path }
 
   let write t { Data.header; Data.tracks } =
     output_string t.out "MThd\000\000\000\006";
