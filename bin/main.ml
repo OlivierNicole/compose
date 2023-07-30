@@ -9,7 +9,7 @@ let output_file = ref ""
 let motive_size = 4
 
 (* Length of the output, in SPEAC phrases *)
-let rough_phrase_length = 10
+let rough_phrase_length = 1500
 
 (* We assume duple meter, i.e. division of each beat in two sub-beats. Input
    works should use this convention. Future work could include supporting
@@ -17,7 +17,7 @@ let rough_phrase_length = 10
 let _meter = 2
 
 (* Minimum length of the output work in beats. *)
-let minimum_length = 20
+let minimum_length = 3000
 
 module List : sig
   include module type of List
@@ -90,11 +90,6 @@ let debug fmt =
   then Stdlib.Format.(eprintf (fmt ^^ "%!"))
   else Stdlib.Format.(ifprintf err_formatter fmt)
 
-let debug_duration fmt =
-  if Clflags.debug "duration"
-  then Stdlib.Format.(eprintf (fmt ^^ "%!"))
-  else Stdlib.Format.(ifprintf err_formatter fmt)
-
 let read_first_track path =
   let reader = Llama_midi.File_reader.of_path path in
   let data = Llama_midi.File_reader.read reader in
@@ -130,10 +125,9 @@ let group_by_beat :
     -> ticks_per_beat:int
     -> a list list =
  fun ~get_duration ~with_duration events ~ticks_per_beat ->
-  let pp_a f x = Fmt.(pf f "%d" (get_duration x)) in
   let[@tail_mod_cons] rec accumulate_up_to_beat acc current_duration events =
     if current_duration = ticks_per_beat
-    then List.rev acc :: aux [] 0 events
+    then List.rev acc :: accumulate_up_to_beat [] 0 events
     else (
       assert (current_duration < ticks_per_beat);
       match events with
@@ -149,7 +143,7 @@ let group_by_beat :
             (* Let's not consider notes that are shorter than 5 % of a beat.
                This is a tolerance for some of MuseScore's annoying
                shortened notes. *)
-            aux acc current_duration es
+            accumulate_up_to_beat acc current_duration es
           else if current_duration + d > ticks_per_beat
           then
             let delta = ticks_per_beat - current_duration in
@@ -158,26 +152,13 @@ let group_by_beat :
               (* Consider the beat complete if less than 5 % of a beat is
                  missing. This is a tolerance for some of MuseScore's annoying
                  shortened notes. *)
-              aux acc ticks_per_beat events
+              accumulate_up_to_beat acc ticks_per_beat events
             else
-              aux
+              accumulate_up_to_beat
                 (with_duration delta e :: acc)
                 ticks_per_beat
                 (with_duration (d - delta) e :: es)
-          else aux (e :: acc) (current_duration + d) es)
-  and aux acc current_duration events =
-    Fmt.(
-      debug_duration
-        "accumulate (%a) %d (%a)\n"
-        (list ~sep:sp pp_a)
-        acc
-        current_duration
-        (list ~sep:sp pp_a)
-        events);
-    let res = accumulate_up_to_beat acc current_duration events in
-    Fmt.(debug_duration "accumulate returned %a\n" (list ~sep:comma (list ~sep:sp pp_a)))
-      res;
-    res
+          else accumulate_up_to_beat (e :: acc) (current_duration + d) es)
   in
   accumulate_up_to_beat [] 0 events
 
@@ -214,24 +195,52 @@ let intervals_and_durations ~ticks_per_beat voice =
 
   List.combine motives intervals, List.combine durations duration_patterns
 
-let find_signatures_generic ~cmp ~match_ motives1 motives2 =
-  List.filter motives1 ~f:(fun (_, i1) ->
-      List.exists motives2 ~f:(fun (_, i2) -> match_ i1 i2))
-  |> List.sort_uniq ~cmp
+module type Motive = sig
+  type t
+  val match_ : t -> t -> bool
+end
 
-type pair_ints_itvls = int list * Interval_sequence.t [@@deriving ord]
+module Counts (Motive : Motive) : sig
+  type t
+  val to_list : t -> (int * Motive.t) list
+  val find_signatures : Motive.t list -> Motive.t list -> t
+end = struct
+  type t = (int * Motive.t) list
 
-type pair_ints_duration_patterns = int list * float list [@@deriving ord, show]
+  let empty = []
 
-let find_signatures =
-  find_signatures_generic ~cmp:compare_pair_ints_itvls ~match_:Interval_sequence.match_
+  let[@tail_mod_cons] rec add m = function
+    | (c, m') :: rest ->
+        if Motive.match_ m m' then
+          (c + 1, m) :: rest
+        else
+          (c, m') :: add m rest
+    | [] -> [ (1, m) ]
 
-let find_duration_signatures =
-  find_signatures_generic ~cmp:compare_pair_ints_duration_patterns ~match_:(fun p1 p2 ->
+  let to_list = Fun.id
+
+  let find_signatures motives1 motives2 =
+    let counts =
+      List.fold_left ~init:empty motives1 ~f:(fun counts m ->
+        if List.exists motives2 ~f:(Motive.match_ m) then add m counts else counts)
+    in
+    List.fold_left ~init:counts motives2 ~f:(fun counts m ->
+      if List.exists motives1 ~f:(Motive.match_ m) then add m counts else counts)
+end
+
+module ItvlCounts = Counts (struct
+  type t = int list * int list (* Pitches, intervals *)
+  let match_ (_, intervals1) (_, intervals2) =
+    Interval_sequence.match_ intervals1 intervals2
+end)
+module DurationPatternCounts = Counts (struct
+    type t = int list * float list (* Durations, ratios *)
+    let match_ (_, p1) (_, p2) =
       List.length p1 = List.length p2
-      && List.for_all2 ~f:(fun d d' -> abs_float (d -. d') <= 1.) p1 p2)
+      && List.for_all2 ~f:(fun d d' -> abs_float (d -. d') <= 0.1) p1 p2
+  end)
 
-let choose_one l rand = List.nth l @@ Random.State.int rand @@ List.length l
+type pair_ints_duration_patterns = int list * float list [@@deriving show]
 
 module Note = struct
   type t =
@@ -241,24 +250,23 @@ module Note = struct
   [@@deriving show]
 end
 
+(* TODO: avoid linear stack usage *)
 let placate_rythms ~rand pitches ~duration_signatures =
   let open Note in
   let rec aux to_rythm =
-    let durations, _ = choose_one duration_signatures rand in
+    let durations, _ = Rand.choose_weighted duration_signatures rand in
     if List.length to_rythm <= List.length durations
     then
       List.map2
         ~f:(fun pitch duration -> { duration; pitch })
         to_rythm
         (List.take (List.length to_rythm) durations)
-      |> List.rev
-    else
+    else (
       let rythmed, to_rythm = List.split_at (List.length durations) to_rythm in
-      List.rev_append
-        (List.map2 ~f:(fun pitch duration -> { pitch; duration }) rythmed durations)
-        (aux to_rythm)
+      List.map2 ~f:(fun pitch duration -> { pitch; duration }) rythmed durations
+      @ aux to_rythm)
   in
-  List.rev (aux pitches)
+  aux pitches
 
 (* Add to each note its timestamp and a constant velocity. *)
 let notes_to_events ~velocity notes =
@@ -345,7 +353,7 @@ let rec find_closest note other_note right_notes =
             if other_note - first <> 5 && note - first <= second - note
             then first
             else second
-          else find_closest note other_note right_notes)
+          else find_closest note other_note (Seq.cons second right_notes))
 
 (* This weird and complicated function is almost a direct copy of Cope's
    function of the same name. If I'm not mistaken, it returns a pitch either a
@@ -353,7 +361,7 @@ let rec find_closest note other_note right_notes =
    minor, but it is such that the resulting note is in the scale of C major. *)
 let find_closest_consonant ~rand base_note =
   find_closest
-    (choose_one (List.filter ~f:(fun n -> n >= 0) [ base_note - 4; base_note + 4 ]) rand)
+    (Rand.choose_one (List.filter ~f:(fun n -> n >= 0) [ base_note - 4; base_note + 4 ]) rand)
     base_note
     (Seq.take 100 major_scale)
 
@@ -386,6 +394,7 @@ let rec insert_cadence
     ~ticks_per_beat
     ~minimum_length
     (beats : (Note.t list * Note.t list) list) =
+  debug "minimum_length = %d\n" minimum_length;
   let open Note in
   match beats with
   | [] ->
@@ -462,27 +471,18 @@ let () =
   let intervals1, durations1 = intervals_and_durations ~ticks_per_beat upper_voice1 in
   let intervals2, durations2 = intervals_and_durations ~ticks_per_beat upper_voice2 in
   let signatures =
-    find_signatures intervals1 intervals2
-    |> List.map ~f:(fun (m, s) -> abs (Interval_sequence.direction s), (m, s))
+    ItvlCounts.find_signatures intervals1 intervals2
+    |> ItvlCounts.to_list
+    |> List.map ~f:(fun (c, (m, s)) -> (c, (abs (Interval_sequence.direction s), m, s)))
     (* To each signature, associate an absolute "direction" *)
   in
   Fmt.(
     debug
       "@[<hov 2>signatures =@ %a@]\n"
       (list
-         (fun f ->
-           pf
-             f
-             "(%a)"
-             (pair
-                ~sep:(fun f () -> pf f " ->@ ")
-                int
-                (pair
-                   ~sep:comma
-                   (fun f -> pf f "(%a)" (list ~sep:sp int))
-                   Interval_sequence.pp)))
-         ~sep:sp)
-      signatures);
+        (fun f (count, (direction, motive, intervals)) ->
+           pf f "(%d,@ (%d,@ %a,@ %a))" count direction (list ~sep:sp int) motive Interval_sequence.pp intervals))
+         signatures);
 
   if !seed = 0
   then (
@@ -509,17 +509,20 @@ let () =
           | A -> 4
           | C -> 3
         in
-        try List.assoc direction signatures |> fst
-        with Not_found -> choose_one signatures rand |> snd |> fst)
+        try List.assoc direction signatures |> (fun (_,m,_) -> m)
+        with Not_found -> Rand.choose_one signatures rand |> (fun (_, (_,m,_)) -> m))
     |> List.concat
   in
   Fmt.(debug "@[<hov 2>melody =@ %a@]\n" (list int ~sep:sp) melody);
 
-  let duration_signatures = find_duration_signatures durations1 durations2 in
+  let duration_signatures =
+    DurationPatternCounts.find_signatures durations1 durations2
+    |> DurationPatternCounts.to_list
+  in
   Fmt.(
     debug
       "@[<hov 2>duration signatures =@ %a@]\n"
-      (list ~sep:sp pp_pair_ints_duration_patterns)
+      (list ~sep:sp (pair ~sep:sp int pp_pair_ints_duration_patterns))
       duration_signatures);
 
   let voice1 = placate_rythms ~rand melody ~duration_signatures in
@@ -585,6 +588,7 @@ let () =
         assert false
   in
   (* Insert a cadence *)
+  debug "minimum_length = %d\n" minimum_length;
   let beats = insert_cadence ~ticks_per_beat ~minimum_length beats in
   let voice1, voice2 = List.split beats in
   let voice1 = List.concat voice1 in
@@ -599,14 +603,15 @@ let () =
 
   let voice1 =
     let open Llama_midi in
-    meta_event 4 "Clavecin"
+    meta_event 1 Fmt.(str "Invention, seed no. %d" !seed)
+    ^:: meta_event 4 "Clavecin"
     (* Track name *)
     ^:: meta_event 88 "\004\002\024\016"
     (* Time signature: 4/4, 24 clocks per quarter note, 32 32nds per quarter note *)
     ^:: meta_event 89 "\000\000"
     (* Key signature: C major *)
-    ^:: meta_event 81 "\010\165\074"
-    (* Tempo: 86 bpm *)
+    ^:: meta_event 81 "\x09\x27\xc0"
+    (* Tempo: 100 bpm *)
     ^:: chan_msg 0 Channel_voice_message.(Control_change { controller = 121; value = 0 })
     (* All controllers off *)
     ^:: chan_msg 0 Channel_voice_message.(Program_change { program = 6 })
