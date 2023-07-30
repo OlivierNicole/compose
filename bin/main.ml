@@ -197,12 +197,15 @@ let intervals_and_durations ~ticks_per_beat voice =
 
 module type Motive = sig
   type t
+
   val match_ : t -> t -> bool
 end
 
 module Counts (Motive : Motive) : sig
   type t
+
   val to_list : t -> (int * Motive.t) list
+
   val find_signatures : Motive.t list -> Motive.t list -> t
 end = struct
   type t = (int * Motive.t) list
@@ -211,34 +214,34 @@ end = struct
 
   let[@tail_mod_cons] rec add m = function
     | (c, m') :: rest ->
-        if Motive.match_ m m' then
-          (c + 1, m) :: rest
-        else
-          (c, m') :: add m rest
-    | [] -> [ (1, m) ]
+        if Motive.match_ m m' then (c + 1, m) :: rest else (c, m') :: add m rest
+    | [] -> [ 1, m ]
 
   let to_list = Fun.id
 
   let find_signatures motives1 motives2 =
     let counts =
       List.fold_left ~init:empty motives1 ~f:(fun counts m ->
-        if List.exists motives2 ~f:(Motive.match_ m) then add m counts else counts)
+          if List.exists motives2 ~f:(Motive.match_ m) then add m counts else counts)
     in
     List.fold_left ~init:counts motives2 ~f:(fun counts m ->
-      if List.exists motives1 ~f:(Motive.match_ m) then add m counts else counts)
+        if List.exists motives1 ~f:(Motive.match_ m) then add m counts else counts)
 end
 
 module ItvlCounts = Counts (struct
   type t = int list * int list (* Pitches, intervals *)
+
   let match_ (_, intervals1) (_, intervals2) =
     Interval_sequence.match_ intervals1 intervals2
 end)
+
 module DurationPatternCounts = Counts (struct
-    type t = int list * float list (* Durations, ratios *)
-    let match_ (_, p1) (_, p2) =
-      List.length p1 = List.length p2
-      && List.for_all2 ~f:(fun d d' -> abs_float (d -. d') <= 0.1) p1 p2
-  end)
+  type t = int list * float list (* Durations, ratios *)
+
+  let match_ (_, p1) (_, p2) =
+    List.length p1 = List.length p2
+    && List.for_all2 ~f:(fun d d' -> abs_float (d -. d') <= 0.1) p1 p2
+end)
 
 type pair_ints_duration_patterns = int list * float list [@@deriving show]
 
@@ -261,10 +264,10 @@ let placate_rythms ~rand pitches ~duration_signatures =
         ~f:(fun pitch duration -> { duration; pitch })
         to_rythm
         (List.take (List.length to_rythm) durations)
-    else (
+    else
       let rythmed, to_rythm = List.split_at (List.length durations) to_rythm in
       List.map2 ~f:(fun pitch duration -> { pitch; duration }) rythmed durations
-      @ aux to_rythm)
+      @ aux to_rythm
   in
   aux pitches
 
@@ -361,7 +364,9 @@ let rec find_closest note other_note right_notes =
    minor, but it is such that the resulting note is in the scale of C major. *)
 let find_closest_consonant ~rand base_note =
   find_closest
-    (Rand.choose_one (List.filter ~f:(fun n -> n >= 0) [ base_note - 4; base_note + 4 ]) rand)
+    (Rand.choose_one
+       (List.filter ~f:(fun n -> n >= 0) [ base_note - 4; base_note + 4 ])
+       rand)
     base_note
     (Seq.take 100 major_scale)
 
@@ -473,16 +478,23 @@ let () =
   let signatures =
     ItvlCounts.find_signatures intervals1 intervals2
     |> ItvlCounts.to_list
-    |> List.map ~f:(fun (c, (m, s)) -> (c, (abs (Interval_sequence.direction s), m, s)))
+    |> List.map ~f:(fun (c, (m, s)) -> c, (abs (Interval_sequence.direction s), m, s))
     (* To each signature, associate an absolute "direction" *)
   in
   Fmt.(
     debug
       "@[<hov 2>signatures =@ %a@]\n"
-      (list
-        (fun f (count, (direction, motive, intervals)) ->
-           pf f "(%d,@ (%d,@ %a,@ %a))" count direction (list ~sep:sp int) motive Interval_sequence.pp intervals))
-         signatures);
+      (list (fun f (count, (direction, motive, intervals)) ->
+           pf
+             f
+             "(%d,@ (%d,@ %a,@ %a))"
+             count
+             direction
+             (list ~sep:sp int)
+             motive
+             Interval_sequence.pp
+             intervals))
+      signatures);
 
   if !seed = 0
   then (
@@ -509,8 +521,8 @@ let () =
           | A -> 4
           | C -> 3
         in
-        try List.assoc direction signatures |> (fun (_,m,_) -> m)
-        with Not_found -> Rand.choose_one signatures rand |> (fun (_, (_,m,_)) -> m))
+        try List.assoc direction signatures |> fun (_, m, _) -> m
+        with Not_found -> Rand.choose_one signatures rand |> fun (_, (_, m, _)) -> m)
     |> List.concat
   in
   Fmt.(debug "@[<hov 2>melody =@ %a@]\n" (list int ~sep:sp) melody);
