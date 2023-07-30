@@ -75,6 +75,7 @@ end
 
 module Data : sig
   type t = { header : Header.t; tracks : Track.t list }
+  [@@deriving eq]
 
   val to_string : t -> string
 end

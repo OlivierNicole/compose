@@ -15,9 +15,7 @@ let () =
   let path' = file ^ "2.mid" in
   let writer = File_writer.of_path path' in
   File_writer.write writer data;
-  (*
   let reader' = File_reader.of_path path' in
   let data' = File_reader.read reader' in
-  Fmt.pr "%s@," @@ Data.to_string data';
-  *)
+  assert (Data.equal data data');
   Fmt.pr "@,@]"

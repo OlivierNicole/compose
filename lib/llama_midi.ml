@@ -50,6 +50,7 @@ module Format = struct
     | Single_track
     | Simultaneous_tracks of int
     | Sequential_tracks of int
+    [@@deriving eq]
 
   let to_string = function
     | Single_track -> "Single_track"
@@ -74,7 +75,9 @@ end
 
 module Division = struct
   type time_code = { smpte_format : int; ticks_per_frame : int }
+    [@@deriving eq]
   type t = Ticks_per_quarter_note of int | Time_code of time_code
+    [@@deriving eq]
 
   let to_string = function
     | Ticks_per_quarter_note n -> sprintf "(Ticks_per_quarter_note %d)" n
@@ -112,6 +115,7 @@ module Header = struct
   end
 
   type t = { format_ : Format.t; division : Division.t }
+    [@@deriving eq]
 
   let to_string { format_; division } =
     sprintf "((format_ %s) (division %s))" (Format.to_string format_)
@@ -146,11 +150,17 @@ end
 
 module Channel_voice_message = struct
   type note_event = { note : int; velocity : int }
+    [@@deriving eq]
   type polyphonic_key_pressure = { note : int; pressure : int }
+    [@@deriving eq]
   type control_change = { controller : int; value : int }
+    [@@deriving eq]
   type program_change = { program : int }
+    [@@deriving eq]
   type channel_pressure = { pressure : int }
+    [@@deriving eq]
   type pitch_wheel_change = { signed_value : int }
+    [@@deriving eq]
 
   type message =
     | Note_off of note_event
@@ -160,8 +170,10 @@ module Channel_voice_message = struct
     | Program_change of program_change
     | Channel_pressure of channel_pressure
     | Pitch_wheel_change of pitch_wheel_change
+    [@@deriving eq]
 
   type t = { channel : int; message : message }
+    [@@deriving eq]
 
   let note_event_to_string { note; velocity } =
     sprintf "((note %d) (velocity %d))" note velocity
@@ -292,6 +304,7 @@ end
 
 module System_message = struct
   type system_exclusive = { manufacturer_id : int; payload : int list }
+    [@@deriving eq]
 
   let system_exclusive_to_string { manufacturer_id; payload } =
     sprintf "((manufacturer_id %d) (payload (%s)))" manufacturer_id
@@ -326,6 +339,7 @@ module System_message = struct
     | Active_sensing
     | Reset
     | Undefined of int
+    [@@deriving eq]
 
   let to_string = function
     | System_exclusive system_exclusive ->
@@ -417,7 +431,9 @@ end
 
 module Meta_event = struct
   type other = { type_index : int; contents : char array }
+    [@@deriving eq]
   type t = End_of_track | Other of other
+    [@@deriving eq]
 
   let string_of_char_array ar =
     let s = Bytes.create (Array.length ar) in
@@ -453,6 +469,7 @@ module Message = struct
     | Channel_voice_message of Channel_voice_message.t
     | System_message of System_message.t
     | Meta_event of Meta_event.t
+    [@@deriving eq]
 
   let to_string = function
     | Channel_voice_message channel_voice_message ->
@@ -487,6 +504,7 @@ end
 
 module Event = struct
   type t = { delta_time : int; message : Message.t }
+    [@@deriving eq]
 
   let to_string { delta_time; message } =
     let message_string = Message.to_string message in
@@ -514,6 +532,7 @@ end
 
 module Track = struct
   type t = Event.t list
+    [@@deriving eq]
 
   let to_string t =
     sprintf "(%s)" (String.concat "\n" (List.map Event.to_string t))
@@ -577,6 +596,7 @@ end
 
 module Data = struct
   type t = { header : Header.t; tracks : Track.t list }
+  [@@deriving eq]
 
   let to_string { header; tracks } =
     sprintf "((header %s)\n(tracks (%s)))" (Header.to_string header)
