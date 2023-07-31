@@ -4,4 +4,6 @@
  (deps bwv772.mid)
  (libraries cope fmt)
  (action
-  (run %{test} bwv772.mid)))
+  (progn
+    (run %{test} %{project_root}/examples/invent5_simplif.mid)
+    (diff? %{project_root}/examples/invent5_simplif.mid %{project_root}/examples/invent5_simplif.2.mid))))
