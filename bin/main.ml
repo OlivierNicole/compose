@@ -6,10 +6,10 @@ let input_files = ref []
 let output_file = ref ""
 
 (* Size of motives considered when searching for signatures *)
-let motive_size = 4
+let motive_size = ref 4
 
 (* Length of the output, in SPEAC phrases *)
-let rough_phrase_length = 1500
+let rough_phrase_length = ref 10
 
 (* We assume duple meter, i.e. division of each beat in two sub-beats. Input
    works should use this convention. Future work could include supporting
@@ -17,7 +17,7 @@ let rough_phrase_length = 1500
 let _meter = 2
 
 (* Minimum length of the output work in beats. *)
-let minimum_length = 3000
+let minimum_length = ref 29
 
 module List : sig
   include module type of List
@@ -165,7 +165,7 @@ let group_by_beat :
 let intervals_and_durations ~ticks_per_beat voice =
   let motives =
     List.map ~f:(fun x -> x.Event.pitch) voice
-    |> List.group_by ~keep_smaller_tail:false motive_size
+    |> List.group_by ~keep_smaller_tail:false !motive_size
   in
   Fmt.(
     debug
@@ -441,10 +441,18 @@ let enable_debug option =
 let () =
   Arg.parse
     [ "-o", Arg.Set_string output_file, "Output file name"
-    ; "-seed", Arg.Set_int seed, "Random seed"
-    ; ( "-debug"
+    ; "--seed", Arg.Set_int seed, "Random seed"
+    ; ( "--debug"
       , Arg.Set_string debug_option
       , "Comma-separated list of passes to enable debug output for" )
+    ; ( "--motive-size"
+      , Arg.Set_int motive_size
+      , "Size of signatures to look for in the input works (default 4)" )
+    ; ( "--min-length"
+      , Arg.Set_int minimum_length
+      , "Minimum length of the output piece in beats. The true length may be \
+         slightly  greater because of the requirement to end on a cadence. \
+         (default 29)" )
     ]
     (fun filename -> input_files := !input_files @ [ filename ])
     "cope <input work 1> <input work 2> -o <output file>";
@@ -455,6 +463,7 @@ let () =
         Fmt.epr "error: cope expects exactly 2 arguments\n";
         exit 1
   in
+  rough_phrase_length := !minimum_length * 2 / !motive_size;
   enable_debug !debug_option;
   if !output_file = ""
   then (
@@ -502,7 +511,9 @@ let () =
     seed := Random.bits ());
   let rand = Random.State.make [| !seed |] in
 
-  let backbone = Speac.generate rand ~rough_phrase_length @ [ Speac.C ] in
+  let backbone =
+    Speac.generate rand ~rough_phrase_length:!rough_phrase_length @ [ Speac.C ]
+  in
   let backbone =
     match backbone with
     | Speac.S :: _ -> backbone
@@ -600,8 +611,7 @@ let () =
         assert false
   in
   (* Insert a cadence *)
-  debug "minimum_length = %d\n" minimum_length;
-  let beats = insert_cadence ~ticks_per_beat ~minimum_length beats in
+  let beats = insert_cadence ~ticks_per_beat ~minimum_length:!minimum_length beats in
   let voice1, voice2 = List.split beats in
   let voice1 = List.concat voice1 in
   let voice2 = List.concat voice2 |> transpose ~shift:(-12) in
