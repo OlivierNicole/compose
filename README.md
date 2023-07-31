@@ -18,6 +18,17 @@ An example output can be found in the `examples/` subdirectory. It is the result
 of running the program on the two (manually simplified) Bach inventions nos. 1
 and 5 present in `examples/` as MIDI files.
 
+## Build, run and/or install
+
+```
+# Installing
+opam install .
+
+# Simply building and running
+opam install . --deps-only
+dune exec -- compose <args...>
+```
+
 ## Usage
 
 ```
