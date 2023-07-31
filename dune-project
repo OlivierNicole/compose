@@ -27,6 +27,6 @@
    \"signatures\") and to recombine signatures to compose a new piece of music while
    adhering to some constraints.")
 
- (depends ocaml dune (llama_midi (>= 0.1.0)))
+ (depends ocaml dune (llama_midi (>= 0.1.0)) fmt ppx_deriving)
  (tags
   ("David Cope" cope music composition)))
