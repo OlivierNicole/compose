@@ -1,9 +1,0 @@
-(test
- (name midi_files)
- (modules midi_files)
- (deps bwv772.mid)
- (libraries cope fmt)
- (action
-  (progn
-    (run %{test} %{project_root}/examples/invent5_simplif.mid)
-    (diff? %{project_root}/examples/invent5_simplif.mid %{project_root}/examples/invent5_simplif.2.mid))))

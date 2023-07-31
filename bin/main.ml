@@ -1,4 +1,4 @@
-open Cope
+open Compose
 open StdLabels
 
 let input_files = ref []
@@ -455,12 +455,12 @@ let () =
          (default 29)" )
     ]
     (fun filename -> input_files := !input_files @ [ filename ])
-    "cope <input work 1> <input work 2> -o <output file>";
+    "compose <input work 1> <input work 2> -o <output file>";
   let work1, work2 =
     match !input_files with
     | [ f1; f2 ] -> f1, f2
     | _ ->
-        Fmt.epr "error: cope expects exactly 2 arguments\n";
+        Fmt.epr "error: compose expects exactly 2 arguments\n";
         exit 1
   in
   rough_phrase_length := !minimum_length * 2 / !motive_size;
@@ -648,7 +648,7 @@ let () =
     (* Chorus off *)
     ^:: meta_event 33 "\000"
     (* play on MIDI port 0 *)
-    ^:: Cope.Event.events_to_midi ~channel:0 voice1
+    ^:: Compose.Event.events_to_midi ~channel:0 voice1
   in
   let voice2 =
     let open Llama_midi in
@@ -670,7 +670,7 @@ let () =
     (* Chorus off *)
     ^:: meta_event 33 "\000"
     (* play on MIDI port 0 *)
-    ^:: Cope.Event.events_to_midi ~channel:1 voice2
+    ^:: Compose.Event.events_to_midi ~channel:1 voice2
   in
   let data_to_write =
     Llama_midi.(

@@ -1,6 +1,6 @@
 (executable
- (public_name cope)
+ (public_name compose)
  (name main)
  (preprocess
   (pps ppx_deriving.show ppx_deriving.eq ppx_deriving.ord))
- (libraries cope))
+ (libraries compose))

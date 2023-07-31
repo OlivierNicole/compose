@@ -21,7 +21,7 @@ and 5 present in `examples/` as MIDI files.
 ## Usage
 
 ```
-cope <input work 1> <input work 2> -o <output file>
+compose <input work 1> <input work 2> -o <output file>
   -o Output file name
   --seed Random seed
   --debug Comma-separated list of passes to enable debug output for
