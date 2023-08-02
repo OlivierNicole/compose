@@ -438,6 +438,14 @@ let enable_debug option =
   let options = String.split_on_char ~sep:',' option in
   List.iter options ~f:(fun s -> Clflags.enable_debug s)
 
+let scale_durations ~tpb1 ~tpb2 =
+  let open Event in
+  List.map ~f:(fun ev ->
+      { ev with
+        timestamp = ev.timestamp * tpb1 / tpb2
+      ; duration = ev.duration * tpb1 / tpb2
+      })
+
 let () =
   Arg.parse
     [ "-o", Arg.Set_string output_file, "Output file name"
@@ -470,9 +478,8 @@ let () =
     exit 1);
   let `Raw_data _data1, upper_voice1, `Ticks_per_beat tpb1 = read_first_track work1 in
   let `Raw_data _data2, upper_voice2, `Ticks_per_beat tpb2 = read_first_track work2 in
-  let ticks_per_beat =
-    assert (tpb1 = tpb2);
-    tpb1
+  let ticks_per_beat, upper_voice2 =
+    tpb1, if tpb1 <> tpb2 then scale_durations ~tpb1 ~tpb2 upper_voice2 else upper_voice2
   in
 
   let upper_voice1 = fix_durations ~ticks_per_beat upper_voice1 in

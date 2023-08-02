@@ -47,7 +47,6 @@ output to be even remotely satisfactory, the input works should verify a number
 of conditions:
 
 - They must be in C major
-- Ornaments and accidentals should be removed (you can try not to, but pattern
-  matching on may yield an very small number of matches, which will show in the
-  result)
-- The two MIDI files should be encoded using the same number of ticks per beat.
+- Ornamentations and accidentals should be removed (you can try not to, but
+  pattern matching may yield an very small number of common motives, which will
+  show in the result)
