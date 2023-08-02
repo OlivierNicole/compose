@@ -535,9 +535,10 @@ let () =
       signatures);
   (match signatures with
   | [] ->
-      Fmt.epr "There appears to be no signatures (common intervalic motives between the \
-      two input works). Try again with a lower --motive-size, or with --debug=main \
-      and/or search my guts to try and understand why.\n";
+      Fmt.epr
+        "There appears to be no signatures (common intervalic motives between the two \
+         input works). Try again with a lower --motive-size, or with --debug=main and/or \
+         search my guts to try and understand why.\n";
       exit 1
   | _ -> ());
 
