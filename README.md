@@ -20,6 +20,9 @@ and 5 present in `examples/` as MIDI files.
 
 ## Build, run and/or install
 
+You will need to have [opam](https://opam.ocaml.org/), the OCaml package
+manager, installed.
+
 ```
 # Installing
 opam pin add llama_midi https://github.com/gridbugs/llama.git#0.1.0
