@@ -22,9 +22,11 @@ and 5 present in `examples/` as MIDI files.
 
 ```
 # Installing
+opam pin add llama_midi https://github.com/gridbugs/llama.git#0.1.0
 opam install .
 
-# Simply building and running
+# ... or simply building and running
+opam pin add llama_midi https://github.com/gridbugs/llama#0.1.0
 opam install . --deps-only
 dune exec -- compose <args...>
 ```
