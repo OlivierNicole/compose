@@ -450,9 +450,8 @@ let () =
       , "Size of signatures to look for in the input works (default 4)" )
     ; ( "--min-length"
       , Arg.Set_int minimum_length
-      , "Minimum length of the output piece in beats. The true length may be \
-         slightly  greater because of the requirement to end on a cadence. \
-         (default 29)" )
+      , "Minimum length of the output piece in beats. The true length may be slightly  \
+         greater because of the requirement to end on a cadence. (default 29)" )
     ]
     (fun filename -> input_files := !input_files @ [ filename ])
     "compose <input work 1> <input work 2> -o <output file>";
