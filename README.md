@@ -38,6 +38,8 @@ compose <input work 1> <input work 2> -o <output file>
   --debug Comma-separated list of passes to enable debug output for
   --motive-size Size of signatures to look for in the input works (default 4)
   --min-length Minimum length of the output piece in beats. The true length may be slightly  greater because of the requirement to end on a cadence. (default 29)
+  --track-index-1 Index of the track to analyze in first input work (default 0)
+  --track-index-2 Index of the track to analyze in second input work (default 0)
   -help  Display this list of options
   --help  Display this list of options
 ```
