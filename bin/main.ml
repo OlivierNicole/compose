@@ -19,6 +19,13 @@ let _meter = 2
 (* Minimum length of the output work in beats. *)
 let minimum_length = ref 29
 
+let seed = ref 0
+
+(* Track index of the voice to analyze in each input work *)
+let track_idx1 = ref 0
+
+let track_idx2 = ref 0
+
 module List : sig
   include module type of List
 
@@ -90,7 +97,7 @@ let debug fmt =
   then Stdlib.Format.(eprintf (fmt ^^ "%!"))
   else Stdlib.Format.(ifprintf err_formatter fmt)
 
-let read_first_track path =
+let read_track n path =
   let reader = Llama_midi.File_reader.of_path path in
   let data = Llama_midi.File_reader.read reader in
   let ticks_per_beat =
@@ -100,8 +107,16 @@ let read_first_track path =
     | Time_code _ -> failwith "SMPTE format not supported"
   in
   debug "@[<v 2>data =@ %s@]\n" @@ Llama_midi.Data.to_string data;
+  if n >= List.length data.Llama_midi.Data.tracks
+  then
+    raise
+      (Invalid_argument
+         (Fmt.str
+            "Track index %d out of bounds (only %d tracks)"
+            n
+            (List.length data.Llama_midi.Data.tracks)));
   let voice =
-    Event.events_of_midi ~ticks_per_beat (List.hd data.Llama_midi.Data.tracks)
+    Event.events_of_midi ~ticks_per_beat (List.nth data.Llama_midi.Data.tracks n)
   in
   Fmt.(debug "@[<v 1>read_first_track: upper voice =@ %a@]\n" (list Event.pp) voice);
   `Raw_data data, voice, `Ticks_per_beat ticks_per_beat
@@ -430,8 +445,6 @@ let rec insert_cadence
           raise
             (Failure "insert_cadence: encountered an empty beat, which shouldn't happen"))
 
-let seed = ref 0
-
 let debug_option = ref ""
 
 let enable_debug option =
@@ -460,6 +473,12 @@ let () =
       , Arg.Set_int minimum_length
       , "Minimum length of the output piece in beats. The true length may be slightly  \
          greater because of the requirement to end on a cadence. (default 29)" )
+    ; ( "--track-index-1"
+      , Arg.Set_int track_idx1
+      , "Index of the track to analyze in first input work (default 0)" )
+    ; ( "--track-index-2"
+      , Arg.Set_int track_idx2
+      , "Index of the track to analyze in second input work (default 0)" )
     ]
     (fun filename -> input_files := !input_files @ [ filename ])
     "compose <input work 1> <input work 2> -o <output file>";
@@ -476,8 +495,12 @@ let () =
   then (
     Fmt.epr "error: option -o <output_file> is mandatory\n";
     exit 1);
-  let `Raw_data _data1, upper_voice1, `Ticks_per_beat tpb1 = read_first_track work1 in
-  let `Raw_data _data2, upper_voice2, `Ticks_per_beat tpb2 = read_first_track work2 in
+  let `Raw_data _data1, upper_voice1, `Ticks_per_beat tpb1 =
+    read_track !track_idx1 work1
+  in
+  let `Raw_data _data2, upper_voice2, `Ticks_per_beat tpb2 =
+    read_track !track_idx2 work2
+  in
   let ticks_per_beat, upper_voice2 =
     tpb1, if tpb1 <> tpb2 then scale_durations ~tpb1 ~tpb2 upper_voice2 else upper_voice2
   in
