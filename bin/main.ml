@@ -26,6 +26,10 @@ let track_idx1 = ref 0
 
 let track_idx2 = ref 0
 
+let transpose_track1 = ref 0
+
+let transpose_track2 = ref 0
+
 module List : sig
   include module type of List
 
@@ -325,6 +329,11 @@ let transpose ~shift notes =
       let pitch = if note.Note.pitch = 0 then 0 else note.Note.pitch + shift in
       { note with Note.pitch })
 
+let transpose_events ~shift =
+  List.map ~f:(fun ev ->
+      let pitch = if ev.Event.pitch = 0 then 0 else ev.Event.pitch + shift in
+      { ev with Event.pitch })
+
 (* Assumes 1 bar = 2 beats *)
 let[@tail_mod_cons] rec map_every_other_bar_even ~f = function
   | b1 :: b2 :: bs -> f b1 :: f b2 :: map_every_other_bar_odd ~f bs
@@ -479,6 +488,12 @@ let () =
     ; ( "--track-index-2"
       , Arg.Set_int track_idx2
       , "Index of the track to analyze in second input work (default 0)" )
+    ; ( "--transpose-work-1"
+      , Arg.Set_int transpose_track1
+      , "Amount of half-steps (possibly negative) by which the voice of work 1 should be transposed (default 0)" )
+    ; ( "--transpose-work-2"
+      , Arg.Set_int transpose_track2
+      , "Amount of half-steps (possibly negative) by which the voice of work 2 should be transposed (default 0)" )
     ]
     (fun filename -> input_files := !input_files @ [ filename ])
     "compose <input work 1> <input work 2> -o <output file>";
@@ -504,6 +519,10 @@ let () =
   let ticks_per_beat, upper_voice2 =
     tpb1, if tpb1 <> tpb2 then scale_durations ~tpb1 ~tpb2 upper_voice2 else upper_voice2
   in
+  debug "transpose_track1 = %d\n" !transpose_track1;
+  debug "transpose_track2 = %d\n" !transpose_track2;
+  let upper_voice1 = if !transpose_track1 <> 0 then transpose_events ~shift:!transpose_track1 upper_voice1 else upper_voice1 in
+  let upper_voice2 = if !transpose_track2 <> 0 then transpose_events ~shift:!transpose_track2 upper_voice2 else upper_voice2 in
 
   let upper_voice1 = fix_durations ~ticks_per_beat upper_voice1 in
   Fmt.(debug "@[<v 1>work 1 upper voice =@ %a@]\n" (list Event.pp) upper_voice1);
